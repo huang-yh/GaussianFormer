@@ -17,7 +17,7 @@ GaussianFormer proposes the 3D semantic Gaussians as **a more efficient object-c
 
 ## Demo
 
-![demo](./assets/demo.mp4)
+![demo](./assets/demo.gif)
 
 ![legend](./assets/legend.png)
 
