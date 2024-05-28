@@ -1,5 +1,5 @@
 # GaussianFormer: Scene as Gaussians for Vision-Based 3D Semantic Occupancy Prediction
-### [Paper](todo)  | [Project Page](https://wzzheng.net/GaussianFormer) 
+### [Paper](https://arxiv.org/abs/2405.17429)  | [Project Page](https://wzzheng.net/GaussianFormer) 
 
 > GaussianFormer: Scene as Gaussians for Vision-Based 3D Semantic Occupancy Prediction
 
@@ -12,7 +12,7 @@ GaussianFormer proposes the 3D semantic Gaussians as **a more efficient object-c
 ![teaser](./assets/teaser.png)
 
 ## News
-- **[2024/05/28]** Paper released on [arXiv](todo).
+- **[2024/05/28]** Paper released on [arXiv](https://arxiv.org/abs/2405.17429).
 - **[2024/05/28]** Demo release.
 
 ## Demo
