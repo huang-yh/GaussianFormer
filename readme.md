@@ -50,7 +50,7 @@ If you find this project helpful, please consider citing the following paper:
 @article{huang2024gaussian,
     title={GaussianFormer: Scene as Gaussians for Vision-Based 3D Semantic Occupancy Prediction},
     author={Huang, Yuanhui and Zheng, Wenzhao and Zhang, Yunpeng and Zhou, Jie and Lu, Jiwen},
-    journal={arXiv preprint arXiv:},
-    year={2023}
+    journal={arXiv preprint arXiv:2405.17429},
+    year={2024}
 }
 ```
