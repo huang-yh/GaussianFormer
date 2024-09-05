@@ -16,6 +16,7 @@ GaussianFormer proposes the 3D semantic Gaussians as **a more efficient object-c
 ## News.
 - **[2024/09/05]** An updated version of GaussianFormer modeling only the occupied area.
 - **[2024/09/05]** Model weights and evaluation code release.
+- **[2024/07/01]** GaussianFormer is accepted to ECCV24!
 - **[2024/05/28]** Paper released on [arXiv](https://arxiv.org/abs/2405.17429).
 - **[2024/05/28]** Demo release.
 
