@@ -9,7 +9,15 @@ img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True
 )
 
-train_pipeline = []
+train_pipeline = [
+    dict(type="LoadMultiViewImageFromFiles", to_float32=True),
+    dict(type="LoadOccupancySurroundOcc", occ_path=occ_path, semantic=True, use_ego=False),
+    dict(type="ResizeCropFlipImage"),
+    dict(type="PhotoMetricDistortionMultiViewImage"),
+    dict(type="NormalizeMultiviewImage", **img_norm_cfg),
+    dict(type="DefaultFormatBundle"),
+    dict(type="NuScenesAdaptor", use_ego=False, num_cams=6),
+]
 
 test_pipeline = [
     dict(type="LoadMultiViewImageFromFiles", to_float32=True),
@@ -30,7 +38,14 @@ data_aug_conf = {
     "rand_flip": True,
 }
 
-train_dataset_config = None
+train_dataset_config = dict(
+    type='NuScenesDataset',
+    data_root=data_root,
+    imageset=anno_root + "nuscenes_infos_train_sweeps_occ.pkl",
+    data_aug_conf=data_aug_conf,
+    pipeline=train_pipeline,
+    phase='train'
+)
 
 val_dataset_config = dict(
     type='NuScenesDataset',
@@ -41,7 +56,11 @@ val_dataset_config = dict(
     phase='val'
 )
 
-train_loader = None
+train_loader = dict(
+    batch_size=batch_size,
+    num_workers=2,
+    shuffle=True
+)
 
 val_loader = dict(
     batch_size=batch_size,

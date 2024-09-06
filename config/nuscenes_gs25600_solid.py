@@ -18,6 +18,50 @@ data_aug_conf = {
 val_dataset_config = dict(
     data_aug_conf=data_aug_conf
 )
+train_dataset_config = dict(
+    data_aug_conf=data_aug_conf
+)
+# =========== misc config ==============
+optimizer = dict(
+    optimizer = dict(
+        type="AdamW", lr=2e-4, weight_decay=0.01,
+    ),
+    paramwise_cfg=dict(
+        custom_keys={
+            'img_backbone': dict(lr_mult=0.1)}
+    )
+)
+grad_max_norm = 35
+# ========= model config ===============
+loss = dict(
+    type='MultiLoss',
+    loss_cfgs=[
+        dict(
+            type='OccupancyLoss',
+            weight=1.0,
+            empty_label=17,
+            num_classes=18,
+            use_focal_loss=False,
+            use_dice_loss=False,
+            balance_cls_weight=True,
+            multi_loss_weights=dict(
+                loss_voxel_ce_weight=10.0,
+                loss_voxel_lovasz_weight=1.0),
+            use_sem_geo_scal_loss=False,
+            use_lovasz_loss=True,
+            lovasz_ignore=17,
+            manual_class_weight=[
+                1.01552756, 1.06897009, 1.30013094, 1.07253735, 0.94637502, 1.10087012,
+                1.26960524, 1.06258364, 1.189019,   1.06217292, 1.00595144, 0.85706115,
+                1.03923299, 0.90867526, 0.8936431,  0.85486129, 0.8527829,  0.5       ])
+        ])
+
+loss_input_convertion = dict(
+    pred_occ="pred_occ",
+    sampled_xyz="sampled_xyz",
+    sampled_label="sampled_label",
+    occ_mask="occ_mask"
+)
 # ========= model config ===============
 embed_dims = 128
 num_decoder = 4
@@ -27,8 +71,7 @@ scale_range = [0.08, 0.64]
 xyz_coordinate = 'cartesian'
 phi_activation = 'sigmoid'
 include_opa = True
-load_from = 'ckpt/fcos3d.pth'
-
+load_from = 'ckpts/r101_dcn_fcos3d_pretrain.pth'
 semantics = True
 semantic_dim = 17
 
@@ -131,7 +174,7 @@ model = dict(
     ),
     head=dict(
         type='GaussianHead',
-        apply_loss_type='all',
+        apply_loss_type='random_1',
         num_classes=semantic_dim + 1,
         empty_args=dict(
             _delete_=True,

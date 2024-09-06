@@ -142,6 +142,7 @@ class GaussianHead(BaseTaskHead):
         return {
             'pred_occ': prediction,
             'sampled_label': sampled_label,
-            'sampled_xyz': sampled_xyz
+            'sampled_xyz': sampled_xyz,
+            'occ_mask': occ_cam_mask
         }
 

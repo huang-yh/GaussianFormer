@@ -164,5 +164,4 @@ ckpts
 data
 .DS_Store
 out
-loss
 checkpoint_utils.py
