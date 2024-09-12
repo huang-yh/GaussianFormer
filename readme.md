@@ -14,6 +14,7 @@ GaussianFormer proposes the 3D semantic Gaussians as **a more efficient object-c
 ![teaser](./assets/teaser.png)
 
 ## News.
+- **[2024/09/12]** Training code release.
 - **[2024/09/05]** An updated version of GaussianFormer modeling only the occupied area.
 - **[2024/09/05]** Model weights and evaluation code release.
 - **[2024/07/01]** GaussianFormer is accepted to ECCV24!
@@ -37,13 +38,14 @@ Considering the universal approximating ability of Gaussian mixture, we propose 
 ## Getting Started
 
 ### Installation
-The environment is almost the same as [SelfOcc](https://github.com/huang-yh/SelfOcc) except for two additional CUDA operations.
+Follow instructions [HERE](docs/installation.md) to prepare the environment.
+<!-- The environment is almost the same as [SelfOcc](https://github.com/huang-yh/SelfOcc) except for two additional CUDA operations.
 
 ```
 1. Follow instructions in SelfOcc to prepare the environment. Not that we do not need packages related to NeRF, so feel safe to skip them.
 2. cd model/encoder/gaussian_encoder/ops && pip install -e .  # deformable cross attention with image features
 3. cd model/head/localagg && pip install -e .  # Gaussian-to-Voxel splatting
-```
+``` -->
 
 ### Data Preparation
 1. Download nuScenes V1.0 full dataset data [HERE](https://www.nuscenes.org/download).
@@ -86,6 +88,19 @@ python eval.py --py-config config/nuscenes_gs144000.py --work-dir out/nuscenes_g
 
 python eval.py --py-config config/nuscenes_gs25600_solid.py --work-dir out/nuscenes_gs25600_solid/ --resume-from out/nuscenes_gs25600_solid/state_dict.pth
 ```
+
+### Train
+Run the following command to launch your training process. Note that the setting with 144000 Gaussians requires ~40G GPU memory in the training phase. So we recommend trying out the 25600 version which achieves even better performance!🚀
+Download the pretrained weights for the image backbone [HERE](https://github.com/zhiqi-li/storage/releases/download/v1.0/r101_dcn_fcos3d_pretrain.pth) and put it inside ckpts.
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py --py-config config/nuscenes_gs25600_solid.py --work-dir out/nuscenes_gs25600_solid
+```
+
+| Config | mIoU | Log | Weight |
+| :---: | :---: | :---: | :---: |
+| nuscenes_gs25600_solid | 19.31 | [log](https://cloud.tsinghua.edu.cn/f/8cef9fbdc92a46d08a15/?dl=1) | [weight](https://cloud.tsinghua.edu.cn/f/d1766fff8ad74756920b/?dl=1) |
+
+Stay tuned for more exciting work and models!🤗
 
 ## Related Projects
 

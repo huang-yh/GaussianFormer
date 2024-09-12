@@ -165,3 +165,4 @@ data
 .DS_Store
 out
 checkpoint_utils.py
+launch_phigent.sh
