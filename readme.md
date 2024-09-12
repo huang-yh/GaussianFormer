@@ -91,6 +91,7 @@ python eval.py --py-config config/nuscenes_gs25600_solid.py --work-dir out/nusce
 
 ### Train
 Run the following command to launch your training process. Note that the setting with 144000 Gaussians requires ~40G GPU memory in the training phase. So we recommend trying out the 25600 version which achieves even better performance!🚀
+
 Download the pretrained weights for the image backbone [HERE](https://github.com/zhiqi-li/storage/releases/download/v1.0/r101_dcn_fcos3d_pretrain.pth) and put it inside ckpts.
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py --py-config config/nuscenes_gs25600_solid.py --work-dir out/nuscenes_gs25600_solid
