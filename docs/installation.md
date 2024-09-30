@@ -32,3 +32,8 @@ pip install timm
 cd model/encoder/gaussian_encoder/ops && pip install -e .
 cd model/head/localagg && pip install -e .
 ```
+
+## 5. (Optional) For visualization
+```bash
+pip install pyvirtualdisplay mayavi matplotlib==3.7.2 PyQt5
+```

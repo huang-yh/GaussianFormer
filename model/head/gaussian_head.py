@@ -143,6 +143,7 @@ class GaussianHead(BaseTaskHead):
             'pred_occ': prediction,
             'sampled_label': sampled_label,
             'sampled_xyz': sampled_xyz,
-            'occ_mask': occ_cam_mask
+            'occ_mask': occ_cam_mask,
+            'gaussian': representation[-1]['gaussian']
         }
 

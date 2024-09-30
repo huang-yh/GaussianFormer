@@ -14,6 +14,7 @@ GaussianFormer proposes the 3D semantic Gaussians as **a more efficient object-c
 ![teaser](./assets/teaser.png)
 
 ## News.
+- **[2024/09/30]** Occupancy and Gaussian visualization code release. 
 - **[2024/09/12]** Training code release.
 - **[2024/09/05]** An updated version of GaussianFormer modeling only the occupied area.
 - **[2024/09/05]** Model weights and evaluation code release.
@@ -102,6 +103,12 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py --py-config config/nuscenes_gs25600
 | nuscenes_gs25600_solid | 19.31 | [log](https://cloud.tsinghua.edu.cn/f/8cef9fbdc92a46d08a15/?dl=1) | [weight](https://cloud.tsinghua.edu.cn/f/d1766fff8ad74756920b/?dl=1) |
 
 Stay tuned for more exciting work and models!🤗
+
+### Visualize
+Install packages for visualization according to the [documentation](docs/installation.md). Here is an example command.
+```bash
+CUDA_VISIBLE_DEVICES=0 python visualize.py --py-config config/nuscenes_gs25600_solid.py --work-dir out/nuscenes_gs25600_solid --resume-from out/nuscenes_gs25600_solid/state_dict.pth --vis-occ --vis-gaussian --num-samples 3
+```
 
 ## Related Projects
 

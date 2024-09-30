@@ -18,6 +18,8 @@ class NuScenesDataset(Dataset):
         imageset=None,
         data_aug_conf=None,
         pipeline=None,
+        vis_indices=None,
+        num_samples=0,
         phase='train'
     ):
         self.data_path = data_root
@@ -34,6 +36,16 @@ class NuScenesDataset(Dataset):
 
         self.sensor_types = ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT', 
             'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT']
+        if vis_indices is not None:
+            if len(vis_indices) > 0:
+                vis_indices = [i % len(self.keyframes) for i in vis_indices]
+                self.keyframes = [self.keyframes[idx] for idx in vis_indices]
+            elif num_samples > 0:
+                vis_indices = np.random.choice(len(self.keyframes), num_samples, False)
+                self.keyframes = [self.keyframes[idx] for idx in vis_indices]
+        elif num_samples > 0:
+            vis_indices = np.random.choice(len(self.keyframes), num_samples, False)
+            self.keyframes = [self.keyframes[idx] for idx in vis_indices]
 
     def _sample_augmentation(self):
         H, W = self.data_aug_conf["H"], self.data_aug_conf["W"]

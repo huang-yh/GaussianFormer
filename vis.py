@@ -19,6 +19,16 @@ except:
     print("No Mayavi installation found.")
 
 import torch, numpy as np
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.style as mplstyle
+mplstyle.use('fast')
+import matplotlib.pyplot as plt
+from matplotlib import cm
+import matplotlib.colors as colors
+from pyquaternion import Quaternion
+import os
+
 
 def get_grid_coords(dims, resolution):
     """
@@ -300,3 +310,113 @@ def save_occ(
     else:
         mlab.show()
     mlab.close()
+
+def get_nuscenes_colormap():
+    colors = np.array(
+        [
+            [  0,   0,   0, 255],       # others
+            [255, 120,  50, 255],       # barrier              orange
+            [255, 192, 203, 255],       # bicycle              pink
+            [255, 255,   0, 255],       # bus                  yellow
+            [  0, 150, 245, 255],       # car                  blue
+            [  0, 255, 255, 255],       # construction_vehicle cyan
+            [255, 127,   0, 255],       # motorcycle           dark orange
+            [255,   0,   0, 255],       # pedestrian           red
+            [255, 240, 150, 255],       # traffic_cone         light yellow
+            [135,  60,   0, 255],       # trailer              brown
+            [160,  32, 240, 255],       # truck                purple                
+            [255,   0, 255, 255],       # driveable_surface    dark pink
+            # [175,   0,  75, 255],       # other_flat           dark red
+            [139, 137, 137, 255],
+            [ 75,   0,  75, 255],       # sidewalk             dard purple
+            [150, 240,  80, 255],       # terrain              light green          
+            [230, 230, 250, 255],       # manmade              white
+            [  0, 175,   0, 255],       # vegetation           green
+            # [  0, 255, 127, 255],       # ego car              dark cyan
+            # [255,  99,  71, 255],       # ego car
+            # [  0, 191, 255, 255]        # ego car
+        ]
+    ).astype(np.float32) / 255.
+    return colors
+
+def save_gaussian(save_dir, gaussian, name):
+    empty_label = 17
+    sem_cmap = get_nuscenes_colormap()
+
+    torch.save(gaussian, os.path.join(save_dir, f'{name}_attr.pth'))
+
+    means = gaussian.means[0].detach().cpu().numpy() # g, 3
+    scales = gaussian.scales[0].detach().cpu().numpy() # g, 3
+    rotations = gaussian.rotations[0].detach().cpu().numpy() # g, 4
+    opas = gaussian.opacities[0]
+    if opas.numel() == 0:
+        opas = torch.ones_like(gaussian.means[0][..., :1])
+    opas = opas.squeeze().detach().cpu().numpy() # g
+    sems = gaussian.semantics[0].detach().cpu().numpy() # g, 18
+    pred = np.argmax(sems, axis=-1)
+
+    mask = (pred != empty_label) & (opas > 0.75)
+
+    means = means[mask]
+    scales = scales[mask]
+    rotations = rotations[mask]
+    opas = opas[mask]
+    pred = pred[mask]
+
+    # number of ellipsoids 
+    ellipNumber = means.shape[0]
+
+    #set colour map so each ellipsoid as a unique colour
+    norm = colors.Normalize(vmin=-1.0, vmax=5.4)
+    cmap = cm.jet
+    m = cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    fig = plt.figure(figsize=(9, 9), dpi=300)
+    ax = fig.add_subplot(111, projection='3d')
+    ax.view_init(elev=46, azim=-180)
+    scalar = 2
+
+    # compute each and plot each ellipsoid iteratively
+    border = np.array([
+        [-50.0, -50.0, 0.0],
+        [-50.0, 50.0, 0.0],
+        [50.0, -50.0, 0.0],
+        [50.0, 50.0, 0.0],
+    ])
+    ax.plot_surface(border[:, 0:1], border[:, 1:2], border[:, 2:], 
+        rstride=1, cstride=1, color=[0, 0, 0, 1], linewidth=0, alpha=0., shade=True)
+
+    for indx in range(ellipNumber):
+        
+        center = means[indx]
+        radii = scales[indx] * scalar
+        rot_matrix = rotations[indx]
+        rot_matrix = Quaternion(rot_matrix).rotation_matrix.T
+
+        # calculate cartesian coordinates for the ellipsoid surface
+        u = np.linspace(0.0, 2.0 * np.pi, 10)
+        v = np.linspace(0.0, np.pi, 10)
+        x = radii[0] * np.outer(np.cos(u), np.sin(v))
+        y = radii[1] * np.outer(np.sin(u), np.sin(v))
+        z = radii[2] * np.outer(np.ones_like(u), np.cos(v))
+
+        xyz = np.stack([x, y, z], axis=-1) # phi, theta, 3
+        xyz = rot_matrix[None, None, ...] @ xyz[..., None]
+        xyz = np.squeeze(xyz, axis=-1)
+
+        xyz = xyz + center[None, None, ...]
+
+        ax.plot_surface(
+            xyz[..., 1], -xyz[..., 0], xyz[..., 2], 
+            rstride=1, cstride=1, color=sem_cmap[pred[indx]], linewidth=0, alpha=opas[indx], shade=True)
+
+    plt.axis("equal")
+    # plt.gca().set_box_aspect([1, 1, 1])
+    ax.grid(False)
+    ax.set_axis_off()    
+
+    filepath = os.path.join(save_dir, f'{name}.png')
+    plt.savefig(filepath)
+
+    plt.cla()
+    plt.clf()
