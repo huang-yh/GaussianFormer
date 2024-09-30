@@ -105,7 +105,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python train.py --py-config config/nuscenes_gs25600
 Stay tuned for more exciting work and models!🤗
 
 ### Visualize
-Install packages for visualization according to the [documentation](docs/installation.md). Here is an example command.
+Install packages for visualization according to the [documentation](docs/installation.md). Here is an example command where you can change --num-samples and --vis-index.
 ```bash
 CUDA_VISIBLE_DEVICES=0 python visualize.py --py-config config/nuscenes_gs25600_solid.py --work-dir out/nuscenes_gs25600_solid --resume-from out/nuscenes_gs25600_solid/state_dict.pth --vis-occ --vis-gaussian --num-samples 3
 ```
