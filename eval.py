@@ -105,7 +105,7 @@ def main(local_rank, args):
     if cfg.resume_from and osp.exists(cfg.resume_from):
         map_location = 'cpu'
         ckpt = torch.load(cfg.resume_from, map_location=map_location)
-        raw_model.load_state_dict(ckpt['state_dict'], strict=True)
+        raw_model.load_state_dict(ckpt.get("state_dict", ckpt), strict=True)
         print(f'successfully resumed.')
     elif cfg.load_from:
         ckpt = torch.load(cfg.load_from, map_location='cpu')
@@ -113,7 +113,12 @@ def main(local_rank, args):
             state_dict = ckpt['state_dict']
         else:
             state_dict = ckpt
-        print(raw_model.load_state_dict(state_dict, strict=False))
+        try:
+            print(raw_model.load_state_dict(state_dict, strict=False))
+        except:
+            from misc.checkpoint_util import refine_load_from_sd
+            print(raw_model.load_state_dict(
+                refine_load_from_sd(state_dict), strict=False))
         
     print_freq = cfg.print_freq
     from misc.metric_util import MeanIoU
@@ -138,24 +143,25 @@ def main(local_rank, args):
                     data[k] = data[k].cuda()
             input_imgs = data.pop('img')
             result_dict = my_model(imgs=input_imgs, metas=data)
-
-            for idx, pred in enumerate(result_dict['pred_occ'][-1]):
-                pred_occ = pred.argmax(0)
-                gt_occ = result_dict['sampled_label'][idx]
-                # if args.vis_occ:
-                #     os.makedirs(os.path.join(args.work_dir, 'vis'), exist_ok=True)
-                #     save_occ(
-                #         os.path.join(args.work_dir, 'vis'),
-                #         pred_occ.reshape(1, 200, 200, 16),
-                #         f'val_{i_iter_val}_pred',
-                #         True, 0)
-                #     save_occ(
-                #         os.path.join(args.work_dir, 'vis'),
-                #         gt_occ.reshape(1, 200, 200, 16),
-                #         f'val_{i_iter_val}_gt',
-                #         True, 0)
-                miou_metric._after_step(pred_occ, gt_occ)
-                # breakpoint()
+            if 'final_occ' in result_dict:
+                for idx, pred in enumerate(result_dict['final_occ']):
+                    pred_occ = pred
+                    gt_occ = result_dict['sampled_label'][idx]
+                    occ_mask = result_dict['occ_mask'][idx].flatten()
+                    # if args.vis_occ:
+                    #     os.makedirs(os.path.join(args.work_dir, 'vis'), exist_ok=True)
+                    #     save_occ(
+                    #         os.path.join(args.work_dir, 'vis'),
+                    #         pred_occ.reshape(1, 200, 200, 16),
+                    #         f'val_{i_iter_val}_pred',
+                    #         True, 0)
+                    #     save_occ(
+                    #         os.path.join(args.work_dir, 'vis'),
+                    #         gt_occ.reshape(1, 200, 200, 16),
+                    #         f'val_{i_iter_val}_gt',
+                    #         True, 0)
+                    miou_metric._after_step(pred_occ, gt_occ, occ_mask)
+                    # breakpoint()
             
             if i_iter_val % print_freq == 0 and local_rank == 0:
                 logger.info('[EVAL] Iter %5d'%(i_iter_val))

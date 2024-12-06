@@ -47,6 +47,8 @@ class OccupancyLoss(BaseLoss):
         use_lovasz_loss=True,
         lovasz_ignore=255,
         manual_class_weight=None,
+        ignore_empty=False,
+        lovasz_use_softmax=True,
         input_dict=None
     ):
         
@@ -70,6 +72,8 @@ class OccupancyLoss(BaseLoss):
         self.use_sem_geo_scal_loss = use_sem_geo_scal_loss
         self.use_lovasz_loss = use_lovasz_loss
         self.lovasz_ignore = lovasz_ignore
+        self.ignore_empty = ignore_empty
+        self.lovasz_use_softmax = lovasz_use_softmax
 
         self.loss_voxel_ce_weight = multi_loss_weights.get('loss_voxel_ce_weight', 1.0)
         self.loss_voxel_sem_scal_weight = multi_loss_weights.get('loss_voxel_sem_scal_weight', 1.0)
@@ -82,7 +86,7 @@ class OccupancyLoss(BaseLoss):
                 class_freqs = nusc_class_frequencies
                 self.class_weights = torch.from_numpy(1 / np.log(class_freqs[:num_classes] + 0.001))
             self.class_weights = num_classes * F.normalize(self.class_weights, 1, -1)
-            print(self.class_weights)
+            print(self.__class__, self.class_weights)
         else:
             self.class_weights = torch.ones(num_classes)
 
@@ -98,25 +102,43 @@ class OccupancyLoss(BaseLoss):
     def loss_voxel(self, pred_occ, sampled_xyz, sampled_label, occ_mask=None):
 
         tot_loss = 0.
+        if self.ignore_empty:
+            empty_mask = sampled_label != self.empty_label
+            occ_mask = empty_mask if occ_mask is None else empty_mask & occ_mask.flatten(1)
+
+        if occ_mask is not None:
+            occ_mask = occ_mask.flatten(1)
+            sampled_label = sampled_label[occ_mask][None]
+
         for semantics in pred_occ:
             if occ_mask is not None:
-                occ_mask = occ_mask.flatten(1)
                 semantics = semantics.transpose(1, 2)[occ_mask][None].transpose(1, 2) # 1, c, n
-                sampled_label = sampled_label[occ_mask][None]
             loss_dict = {}
             # semantics = semantics.transpose(0, 1).unsqueeze(0)
             if self.use_focal_loss:
                 loss_dict['loss_voxel_ce'] = self.loss_voxel_ce_weight * \
                     self.focal_loss(semantics, sampled_label, sampled_xyz, self.class_weights.type_as(semantics), ignore_index=255)
             else:
-                loss_dict['loss_voxel_ce'] = self.loss_voxel_ce_weight * \
-                    CE_ssc_loss(semantics, sampled_label, self.class_weights.type_as(semantics), ignore_index=255)
+                if self.lovasz_use_softmax:
+                    loss_dict['loss_voxel_ce'] = self.loss_voxel_ce_weight * \
+                        CE_ssc_loss(semantics, sampled_label, self.class_weights.type_as(semantics), ignore_index=255)
+                else:
+                    loss_dict['loss_voxel_ce'] = self.loss_voxel_ce_weight * CE_wo_softmax(
+                        semantics, sampled_label, self.class_weights.type_as(semantics), ignore_index=255)
             if self.use_sem_geo_scal_loss:
-                loss_dict['loss_voxel_sem_scal'] = self.loss_voxel_sem_scal_weight * sem_scal_loss(semantics, sampled_label, ignore_index=255)
-                loss_dict['loss_voxel_geo_scal'] = self.loss_voxel_geo_scal_weight * geo_scal_loss(semantics, sampled_label, ignore_index=255, non_empty_idx=self.empty_label)
+                if self.lovasz_use_softmax:
+                    scal_input = torch.softmax(semantics, dim=1)
+                else:
+                    scal_input = semantics
+                loss_dict['loss_voxel_sem_scal'] = self.loss_voxel_sem_scal_weight * sem_scal_loss(scal_input.clone(), sampled_label, ignore_index=255)
+                loss_dict['loss_voxel_geo_scal'] = self.loss_voxel_geo_scal_weight * geo_scal_loss(scal_input.clone(), sampled_label, ignore_index=255, non_empty_idx=self.empty_label)
             if self.use_lovasz_loss:
+                if self.lovasz_use_softmax:
+                    lovasz_input = torch.softmax(semantics, dim=1)
+                else:
+                    lovasz_input = semantics
                 loss_dict['loss_voxel_lovasz'] = self.loss_voxel_lovasz_weight * lovasz_softmax(
-                    torch.softmax(semantics, dim=1).transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
+                    lovasz_input.transpose(1, 2).flatten(0, 1), sampled_label.flatten(), ignore=self.lovasz_ignore)
             if self.use_dice_loss:
                 loss_dict['loss_voxel_dice'] = self.dice_loss(semantics, sampled_label)
 
@@ -124,7 +146,7 @@ class OccupancyLoss(BaseLoss):
             for k, v in loss_dict.items():
                 loss = loss + v
             tot_loss = tot_loss + loss
-        return tot_loss * self.weight
+        return tot_loss / len(pred_occ)
 
 
 from torch.cuda.amp import autocast
@@ -155,10 +177,15 @@ def CE_ssc_loss(pred, target, class_weights=None, ignore_index=255):
 
     return loss
 
-def sem_scal_loss(pred_, ssc_target, ignore_index=255):
+def CE_wo_softmax(pred, target, class_weights=None, ignore_index=255):
+    pred = torch.clamp(pred, 1e-6, 1. - 1e-6)
+    loss = F.nll_loss(torch.log(pred), target, class_weights, ignore_index=ignore_index)
+    return loss
+
+def sem_scal_loss(pred, ssc_target, ignore_index=255):
     # Get softmax probabilities
     with autocast(False):
-        pred = F.softmax(pred_, dim=1)
+        # pred = F.softmax(pred_, dim=1)
         loss = 0
         count = 0
         mask = ssc_target != ignore_index
@@ -215,7 +242,7 @@ def sem_scal_loss(pred_, ssc_target, ignore_index=255):
 def geo_scal_loss(pred, ssc_target, ignore_index=255, non_empty_idx=0):
 
     # Get softmax probabilities
-    pred = F.softmax(pred, dim=1)
+    # pred = F.softmax(pred, dim=1)
 
     # Compute empty and nonempty probabilities
     empty_probs = pred[:, non_empty_idx]

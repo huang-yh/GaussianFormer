@@ -75,6 +75,8 @@ def main(local_rank, args):
     my_model.init_weights()
     n_parameters = sum(p.numel() for p in my_model.parameters() if p.requires_grad)
     logger.info(f'Number of params: {n_parameters}')
+
+    logger.info(f'Params require grad: {[n for n, p in my_model.named_parameters() if p.requires_grad]}')
     if distributed:
         if cfg.get('syncBN', True):
             my_model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(my_model)
@@ -114,7 +116,7 @@ def main(local_rank, args):
         scheduler = CosineLRScheduler(
             optimizer,
             t_initial=len(train_dataset_loader) * max_num_epochs,
-            lr_min=cfg.optimizer["optimizer"]["lr"] * 0.1, #1e-6,
+            lr_min=cfg.optimizer["optimizer"]["lr"] * cfg.get("min_lr_ratio", 0.1), #1e-6,
             warmup_t=cfg.get('warmup_iters', 500),
             warmup_lr_init=1e-6,
             t_in_epochs=False)
@@ -204,7 +206,8 @@ def main(local_rank, args):
                 result_dict = my_model(imgs=input_imgs, metas=data, global_iter=global_iter)
 
                 loss_input = {
-                    'metas': data
+                    'metas': data,
+                    'global_iter': global_iter
                 }
                 for loss_input_key, loss_input_val in cfg.loss_input_convertion.items():
                     loss_input.update({
@@ -232,7 +235,8 @@ def main(local_rank, args):
 
             global_iter += 1
             if i_iter % print_freq == 0 and local_rank == 0:
-                lr = optimizer.param_groups[0]['lr']
+                lr = max([p['lr'] for p in optimizer.param_groups])
+                # lr = optimizer.param_groups[0]['lr']
                 logger.info('[TRAIN] Epoch %d Iter %5d/%d: Loss: %.3f (%.3f), grad_norm: %.3f, lr: %.7f, time: %.3f (%.3f)'%(
                     epoch, i_iter, len(train_dataset_loader), 
                     loss.item(), np.mean(loss_list), grad_norm, lr,
@@ -298,16 +302,19 @@ def main(local_rank, args):
 
                     loss_input = {
                         'metas': data,
+                        'global_iter': global_iter
                     }
                     for loss_input_key, loss_input_val in cfg.loss_input_convertion.items():
                         loss_input.update({
                             loss_input_key: result_dict[loss_input_val]})
                     loss, loss_dict = loss_func(loss_input)
-
-                for idx, pred in enumerate(result_dict['pred_occ'][-1]):
-                    pred_occ = pred.argmax(0)
-                    gt_occ = result_dict['sampled_label'][idx]
-                    miou_metric._after_step(pred_occ, gt_occ)
+                
+                if 'final_occ' in result_dict:
+                    for idx, pred in enumerate(result_dict['final_occ']):
+                        pred_occ = pred
+                        gt_occ = result_dict['sampled_label'][idx]
+                        occ_mask = result_dict['occ_mask'][idx].flatten()
+                        miou_metric._after_step(pred_occ, gt_occ, occ_mask)
                 
                 val_loss_list.append(loss.detach().cpu().numpy())
                 if i_iter_val % print_freq == 0 and local_rank == 0:

@@ -18,14 +18,12 @@ class GaussianOccEncoder(BaseEncoder):
         mid_refine_layer: dict = None,
         spconv_layer: dict = None,
         num_decoder: int = 6,
-        num_single_frame_decoder: int = -1,
         operation_order: Optional[List[str]] = None,
         init_cfg=None,
         **kwargs,
     ):
         super().__init__(init_cfg)
         self.num_decoder = num_decoder
-        self.num_single_frame_decoder = num_single_frame_decoder
 
         if operation_order is None:
             operation_order = [
@@ -108,7 +106,6 @@ class GaussianOccEncoder(BaseEncoder):
                     anchor_embed,
                     feature_maps,
                     metas,
-                    anchor_encoder=self.anchor_encoder,
                 )
             elif "refine" in op:
                 anchor, gaussian = self.layers[i](

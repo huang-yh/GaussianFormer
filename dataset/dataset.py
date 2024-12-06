@@ -20,7 +20,19 @@ class NuScenesDataset(Dataset):
         pipeline=None,
         vis_indices=None,
         num_samples=0,
-        phase='train'
+        vis_scene_index=-1,
+        phase='train',
+        return_keys=[
+            'img',
+            'projection_mat',
+            'image_wh',
+            'occ_label',
+            'occ_xyz',
+            'occ_cam_mask',
+            'ori_img',
+            'cam_positions',
+            'focal_positions'
+        ],
     ):
         self.data_path = data_root
         data = mmengine.load(imageset)
@@ -36,7 +48,13 @@ class NuScenesDataset(Dataset):
 
         self.sensor_types = ['CAM_FRONT', 'CAM_FRONT_RIGHT', 'CAM_FRONT_LEFT', 
             'CAM_BACK', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT']
-        if vis_indices is not None:
+        self.return_keys = return_keys
+        if vis_scene_index >= 0:
+            frame = self.keyframes[vis_scene_index]
+            num_frames = len(self.scene_infos[frame[0]])
+            self.keyframes = [(frame[0], i) for i in range(num_frames)]
+            print(f'Scene length: {len(self.keyframes)}')
+        elif vis_indices is not None:
             if len(vis_indices) > 0:
                 vis_indices = [i % len(self.keyframes) for i in vis_indices]
                 self.keyframes = [self.keyframes[idx] for idx in vis_indices]
@@ -91,23 +109,16 @@ class NuScenesDataset(Dataset):
         for t in self.pipeline:
             input_dict = t(input_dict)
         
-        return_dict = {
-            'img': input_dict['img'],
-            'projection_mat': input_dict['projection_mat'],
-            'image_wh': input_dict['image_wh'],
-            'occ_label': input_dict['occ_label'],
-            'occ_xyz': input_dict['occ_xyz'],
-            'occ_cam_mask': input_dict['occ_cam_mask']
-        }
+        return_dict = {k: input_dict[k] for k in self.return_keys}
         return return_dict
     
     def get_data_info(self, info):
+        f = 0.0055
         image_paths = []
         lidar2img_rts = []
-        img2lidar_rts = []
-        cam_intrinsics = []
-        cam2ego_rts = []
         ego2image_rts = []
+        cam_positions = []
+        focal_positions = []
 
         lidar2ego_r = Quaternion(info['data']['LIDAR_TOP']['calib']['rotation']).rotation_matrix
         lidar2ego = np.eye(4)
@@ -125,38 +136,32 @@ class NuScenesDataset(Dataset):
 
             img2global = get_img2global(info['data'][cam_type]['calib'], info['data'][cam_type]['pose'])
             lidar2img = np.linalg.inv(img2global) @ lidar2global
+
+            lidar2img_rts.append(lidar2img)
+            ego2image_rts.append(np.linalg.inv(img2global) @ ego2global)
+
             img2lidar = np.linalg.inv(lidar2global) @ img2global
-
-            cam2ego_r = Quaternion(info['data'][cam_type]['calib']['rotation']).rotation_matrix
-            cam2ego = np.eye(4)
-            cam2ego[:3, :3] = cam2ego_r
-            cam2ego[:3, 3] = np.array(info['data'][cam_type]['calib']['translation']).T
-
             intrinsic = info['data'][cam_type]['calib']['camera_intrinsic']
             viewpad = np.eye(4)
             viewpad[:3, :3] = intrinsic
-
-            lidar2img_rts.append(lidar2img)
-            img2lidar_rts.append(img2lidar)
-            cam_intrinsics.append(viewpad)
-            cam2ego_rts.append(cam2ego)
-            ego2image_rts.append(np.linalg.inv(img2global) @ ego2global)
+            cam_position = img2lidar @ viewpad @ np.array([0., 0., 0., 1.]).reshape([4, 1])
+            cam_positions.append(cam_position.flatten()[:3])
+            focal_position = img2lidar @ viewpad @ np.array([0., 0., f, 1.]).reshape([4, 1])
+            focal_positions.append(focal_position.flatten()[:3])
             
         input_dict =dict(
-            sample_idx=info["token"],
-            pts_filename=os.path.join(self.data_path, info['data']['LIDAR_TOP']['filename']),
-            occ_path=info["occ_path"],
+            # sample_idx=info["token"],
+            sample_idx=info.get("token", ""),
+            # occ_path=info["occ_path"],
+            occ_path=info.get("occ_path", ""),
             timestamp=info["timestamp"] / 1e6,
-            ego2global=ego2global,
-            lidar2global=lidar2global,
             img_filename=image_paths,
-            lidar2img=np.asarray(lidar2img_rts),
-            img2lidar=np.asarray(img2lidar_rts),
-            cam_intrinsic=np.asarray(cam_intrinsics),
-            ori_intrinsic=np.array(cam_intrinsics).copy(),
+            pts_filename=os.path.join(self.data_path, info['data']['LIDAR_TOP']['filename']),
             ego2lidar=ego2lidar,
-            cam2ego=np.asarray(cam2ego_rts),
-            ego2img=np.asarray(ego2image_rts))
+            lidar2img=np.asarray(lidar2img_rts),
+            ego2img=np.asarray(ego2image_rts),
+            cam_positions=np.asarray(cam_positions),
+            focal_positions=np.asarray(focal_positions))
 
         return input_dict
 

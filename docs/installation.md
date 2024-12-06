@@ -31,6 +31,9 @@ pip install timm
 ```bash
 cd model/encoder/gaussian_encoder/ops && pip install -e .
 cd model/head/localagg && pip install -e .
+# for GaussianFormer-2
+cd model/head/localagg_prob && pip install -e .
+cd model/head/localagg_prob_fast && pip install -e .
 ```
 
 ## 5. (Optional) For visualization

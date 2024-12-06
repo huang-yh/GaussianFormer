@@ -3,6 +3,7 @@ from mmseg.models import SEGMENTORS
 from mmseg.models import build_backbone
 
 from .base_segmentor import CustomBaseSegmentor
+import torch, time
 
 @SEGMENTORS.register_module()
 class BEVSegmentor(CustomBaseSegmentor):
@@ -11,6 +12,7 @@ class BEVSegmentor(CustomBaseSegmentor):
         self,
         freeze_img_backbone=False,
         freeze_img_neck=False,
+        freeze_lifter=False,
         img_backbone_out_indices=[1, 2, 3],
         extra_img_backbone=None,
         # use_post_fusion=False,
@@ -28,12 +30,17 @@ class BEVSegmentor(CustomBaseSegmentor):
             self.img_backbone.requires_grad_(False)
         if freeze_img_neck:
             self.img_neck.requires_grad_(False)
+        if freeze_lifter:
+            self.lifter.requires_grad_(False)
+            if hasattr(self.lifter, "random_anchors"):
+                self.lifter.random_anchors.requires_grad = True
         if extra_img_backbone is not None:
             self.extra_img_backbone = build_backbone(extra_img_backbone)
 
     def extract_img_feat(self, imgs, **kwargs):
         """Extract features of images."""
         B = imgs.size(0)
+        result = {}
 
         B, N, C, H, W = imgs.size()
         imgs = imgs.reshape(B * N, C, H, W)
@@ -44,6 +51,12 @@ class BEVSegmentor(CustomBaseSegmentor):
         for idx in self.img_backbone_out_indices:
             img_feats.append(img_feats_backbone[idx])
         img_feats = self.img_neck(img_feats)
+        if isinstance(img_feats, dict):
+            secondfpn_out = img_feats["secondfpn_out"][0]
+            BN, C, H, W = secondfpn_out.shape
+            secondfpn_out = secondfpn_out.view(B, int(BN / B), C, H, W)
+            img_feats = img_feats["fpn_out"]
+            result.update({"secondfpn_out": secondfpn_out})
 
         img_feats_reshaped = []
         for img_feat in img_feats:
@@ -52,7 +65,8 @@ class BEVSegmentor(CustomBaseSegmentor):
             #     img_feats_reshaped.append(img_feat.unsqueeze(1))
             # else:
             img_feats_reshaped.append(img_feat.view(B, int(BN / B), C, H, W))
-        return {'ms_img_feats': img_feats_reshaped}
+        result.update({'ms_img_feats': img_feats_reshaped})
+        return result
     
     def forward_extra_img_backbone(self, imgs, **kwargs):
         """Extract features of images."""
@@ -92,7 +106,14 @@ class BEVSegmentor(CustomBaseSegmentor):
         results.update(kwargs)
         outs = self.extract_img_feat(**results)
         results.update(outs)
+
+        # torch.cuda.synchronize()
+        # start_time = time.perf_counter()
         outs = self.lifter(**results)
+        # torch.cuda.synchronize()
+        # elapsed = time.perf_counter() - start_time
+        # results.update({"lifter_time": elapsed})
+
         results.update(outs)
         outs = self.encoder(**results)
         if rep_only:

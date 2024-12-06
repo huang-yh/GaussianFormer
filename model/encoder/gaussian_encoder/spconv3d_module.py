@@ -14,30 +14,39 @@ class SparseConv3D(BaseModule):
         embed_channels,
         pc_range,
         grid_size,
-        phi_activation='loop',
-        xyz_coordinate='polar',
+        xyz_activation="sigmoid",
         use_out_proj=False,
         kernel_size=5,
-        init_cfg=None
+        use_multi_layer=False,
+        init_cfg=None,
+        **kwargs,
     ):
         super().__init__(init_cfg)
-
-        self.layer = spconv.SubMConv3d(
-            in_channels,
-            embed_channels,
-            kernel_size=kernel_size,
-            padding=(kernel_size - 1) // 2,
-            bias=False)
+        
+        if use_multi_layer:
+            self.layer = spconv.SparseSequential(
+                spconv.SubMConv3d(in_channels, embed_channels, kernel_size, 1, (kernel_size - 1) // 2),
+                nn.LayerNorm(embed_channels),
+                nn.ReLU(True),
+                spconv.SubMConv3d(embed_channels, embed_channels, kernel_size, 1, (kernel_size - 1) // 2),
+                nn.LayerNorm(embed_channels),
+                nn.ReLU(True),
+                spconv.SubMConv3d(embed_channels, embed_channels, kernel_size, 1, (kernel_size - 1) // 2),
+                nn.LayerNorm(embed_channels),
+                nn.ReLU(True),
+            )        
+        else:
+            self.layer = spconv.SubMConv3d(
+                in_channels,
+                embed_channels,
+                kernel_size=kernel_size,
+                padding=(kernel_size - 1) // 2,
+                bias=False)
         if use_out_proj:
             self.output_proj = nn.Linear(embed_channels, embed_channels)
         else:
             self.output_proj = nn.Identity()
-        if xyz_coordinate == 'polar':
-            self.get_xyz = partial(
-                spherical2cartesian, pc_range=pc_range, phi_activation=phi_activation)
-        else:
-            self.get_xyz = partial(
-                cartesian, pc_range=pc_range)
+        self.get_xyz = partial(cartesian, pc_range=pc_range, use_sigmoid=(xyz_activation=="sigmoid"))
         self.register_buffer('pc_range', torch.tensor(pc_range, dtype=torch.float))
         self.register_buffer('grid_size', torch.tensor(grid_size, dtype=torch.float))
 
@@ -50,15 +59,17 @@ class SparseConv3D(BaseModule):
         anchor_xyz = anchor[..., :3]
         anchor_xyz = self.get_xyz(anchor_xyz).flatten(0, 1) 
 
-        indices = anchor_xyz - anchor_xyz.min(0, keepdim=True)[0]
+        # indices = anchor_xyz - anchor_xyz.min(0, keepdim=True)[0]
+        indices = anchor_xyz - self.pc_range[None, :3]
         indices = indices / self.grid_size[None, :] # bg, 3
         indices = indices.to(torch.int32)
         batched_indices = torch.cat([
             torch.arange(bs, device=indices.device, dtype=torch.int32).reshape(
-                bs, 1, 1).expand(-1, g, -1).flatten(0, 1),
-            indices], dim=-1)
+            bs, 1, 1).expand(-1, g, -1).flatten(0, 1), indices], dim=-1)
         
-        spatial_shape = indices.max(0)[0]
+        # spatial_shape = indices.max(0)[0]
+        spatial_shape = (self.pc_range[3:] - self.pc_range[:3]) / self.grid_size
+        spatial_shape = spatial_shape.to(torch.int32)
 
         input = spconv.SparseConvTensor(
             instance_feature.flatten(0, 1), # bg, c

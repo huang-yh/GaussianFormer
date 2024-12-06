@@ -5,6 +5,7 @@ from numpy import random
 import mmcv
 from PIL import Image
 import math
+from copy import deepcopy
 
 from . import OPENOCC_TRANSFORMS
 
@@ -59,8 +60,6 @@ class NuScenesAdaptor(object):
     def __init__(self, num_cams, use_ego=False):
         self.num_cams = num_cams
         self.projection_key = 'ego2img' if use_ego else 'lidar2img'
-        self.T_key = 'ego2global' if use_ego else 'lidar2global'
-        pass
 
     def __call__(self, input_dict):
         input_dict["projection_mat"] = np.float32(
@@ -69,14 +68,6 @@ class NuScenesAdaptor(object):
         input_dict["image_wh"] = np.ascontiguousarray(
             np.array(input_dict["img_shape"], dtype=np.float32)[:, :2][:, ::-1]
         )
-        # input_dict["T_global_inv"] = np.linalg.inv(input_dict[self.T_key])
-        # input_dict["T_global"] = input_dict[self.T_key]
-        # if "cam_intrinsic" in input_dict:
-        #     input_dict["cam_intrinsic"] = np.float32(
-        #         np.stack(input_dict["cam_intrinsic"]))
-        #     input_dict["focal"] = input_dict["cam_intrinsic"][..., 0, 0]
-        # input_dict["extrinsics"] = input_dict["lidar2temCam"]
-        # input_dict["intrinsics"] = input_dict["ori_intrinsic"][..., :3, :3]
         return input_dict
 
 
@@ -105,8 +96,6 @@ class ResizeCropFlipImage(object):
             new_imgs.append(np.array(img).astype(np.float32))
             results["lidar2img"][i] = mat @ results["lidar2img"][i]
             results["ego2img"][i] = mat @ results["ego2img"][i]
-            if "cam_intrinsic" in results:
-                results["cam_intrinsic"][i][:3, :3] *= resize
 
         results["img"] = new_imgs
         results["img_shape"] = [x.shape[:2] for x in new_imgs]
@@ -308,9 +297,10 @@ class LoadMultiViewImageFromFiles(object):
             Defaults to 'unchanged'.
     """
 
-    def __init__(self, to_float32=False, color_type='unchanged'):
+    def __init__(self, to_float32=False, color_type='unchanged', crop_size=None):
         self.to_float32 = to_float32
         self.color_type = color_type
+        self.crop_size = crop_size
 
     def __call__(self, results):
         """Call function to load multi-view image from files.
@@ -334,12 +324,15 @@ class LoadMultiViewImageFromFiles(object):
         # img is of shape (h, w, c, num_views)
         img = np.stack(
             [mmcv.imread(name, self.color_type) for name in filename], axis=-1)
+        if self.crop_size is not None:
+            img = img[:self.crop_size[0], :self.crop_size[1]]
         if self.to_float32:
             img = img.astype(np.float32)
         results['filename'] = filename
         # unravel to list, see `DefaultFormatBundle` in formatting.py
         # which will transpose each image separately and then stack into array
         results['img'] = [img[..., i] for i in range(img.shape[-1])]
+        results['ori_img'] = deepcopy(img)
         results['img_shape'] = img.shape
         results['ori_shape'] = img.shape
         # Set initial values for default meta_keys
@@ -367,7 +360,6 @@ class LoadPointFromFile(object):
         self.use_ego = use_ego
         self.pc_range = pc_range
         self.num_pts = num_pts
-        pass
 
     def __call__(self, results):
         pts_path = results['pts_filename']
@@ -393,7 +385,7 @@ class LoadPointFromFile(object):
         if scan.shape[0] < self.num_pts:
             multi = int(math.ceil(self.num_pts * 1.0 / scan.shape[0])) - 1
             scan_ = np.repeat(scan, multi, 0)
-            scan_ = scan_ + np.random.randn(*scan_.shape) * 0.3
+            scan_ = scan_ + np.random.randn(*scan_.shape) * 0.2
             scan_ = scan_[np.random.choice(scan_.shape[0], self.num_pts - scan.shape[0], False)]
             scan_[:, 0] = np.clip(scan_[:, 0], self.pc_range[0], self.pc_range[3])
             scan_[:, 1] = np.clip(scan_[:, 1], self.pc_range[1], self.pc_range[4])
@@ -405,7 +397,7 @@ class LoadPointFromFile(object):
         scan[:, 0] = (scan[:, 0] - self.pc_range[0]) / (self.pc_range[3] - self.pc_range[0])
         scan[:, 1] = (scan[:, 1] - self.pc_range[1]) / (self.pc_range[4] - self.pc_range[1])
         scan[:, 2] = (scan[:, 2] - self.pc_range[2]) / (self.pc_range[5] - self.pc_range[2])
-        results['anchor_points'] = scan
+        results['anchor_points'] = scan.astype(np.float32)
         
         return results
     
@@ -481,12 +473,13 @@ class LoadPseudoPointFromFile(object):
 @OPENOCC_TRANSFORMS.register_module()
 class LoadOccupancySurroundOcc(object):
 
-    def __init__(self, occ_path, semantic=False, use_ego=False, use_sweeps=False):
+    def __init__(self, occ_path, semantic=False, use_ego=False, use_sweeps=False, perturb=False):
         self.occ_path = occ_path
         self.semantic = semantic
         self.use_ego = use_ego
         assert semantic and (not use_ego)
         self.use_sweeps = use_sweeps
+        self.perturb = perturb
 
         xyz = self.get_meshgrid([-50, -50, -5.0, 50, 50, 3.0], [200, 200, 16], 0.5)
         self.xyz = np.concatenate([xyz, np.ones_like(xyz[..., :1])], axis=-1) # x, y, z, 4
@@ -524,12 +517,18 @@ class LoadOccupancySurroundOcc(object):
             results['occ_cam_mask'] = mask
         else:
             raise NotImplementedError
-        
+
+        xyz = self.xyz.copy()
+        if getattr(self, "perturb", False):
+            # xyz[..., :3] = xyz[..., :3] + (np.random.rand(*xyz.shape[:-1], 3) - 0.5) * (0.5 - 1e-3)
+            norm_distribution = np.clip(np.random.randn(*xyz.shape[:-1], 3) / 6, -0.5, 0.5)
+            xyz[..., :3] = xyz[..., :3] + norm_distribution * 0.49
+
         if not self.use_ego:
-            occ_xyz = self.xyz[..., :3]
+            occ_xyz = xyz[..., :3]
         else:
             ego2lidar = np.linalg.inv(results['ego2lidar']) # 4, 4
-            occ_xyz = ego2lidar[None, None, None, ...] @ self.xyz[..., None] # x, y, z, 4, 1
+            occ_xyz = ego2lidar[None, None, None, ...] @ xyz[..., None] # x, y, z, 4, 1
             occ_xyz = np.squeeze(occ_xyz, -1)[..., :3]
         results['occ_xyz'] = occ_xyz
         return results
@@ -543,12 +542,14 @@ class LoadOccupancySurroundOcc(object):
 @OPENOCC_TRANSFORMS.register_module()
 class LoadOccupancyKITTI360(object):
 
-    def __init__(self, occ_path, semantic=False):
+    def __init__(self, occ_path, semantic=False, unknown_to_empty=False, training=False):
         self.occ_path = occ_path
         self.semantic = semantic
 
         xyz = self.get_meshgrid([0.0, -25.6, -2.0, 51.2, 25.6, 4.4], [256, 256, 32], 0.2)
         self.xyz = np.concatenate([xyz, np.ones_like(xyz[..., :1])], axis=-1) # x, y, z, 4
+        self.unknown_to_empty = unknown_to_empty
+        self.training = training
 
     def get_meshgrid(self, ranges, grid, reso):
         xxx = torch.arange(grid[0], dtype=torch.float) * reso + 0.5 * reso + ranges[0]
@@ -565,13 +566,15 @@ class LoadOccupancyKITTI360(object):
         return xyz # x, y, z, 3
 
     def __call__(self, results):        
-        occ_xyz = self.xyz[..., :3]
+        occ_xyz = self.xyz[..., :3].copy()
         results['occ_xyz'] = occ_xyz
 
         ## read occupancy label
         label_path = os.path.join(
             self.occ_path, results['sequence'], "{}_1_1.npy".format(results['token']))
         label = np.load(label_path).astype(np.int64)
+        if getattr(self, "unknown_to_empty", False) and getattr(self, "training", False):
+            label[label == 255] = 0
 
         results['occ_cam_mask'] = (label != 255)
         results['occ_label'] = label

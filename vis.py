@@ -27,7 +27,10 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as colors
 from pyquaternion import Quaternion
+from mpl_toolkits.axes_grid1 import ImageGrid
 import os
+
+from model.utils.safe_ops import safe_sigmoid
 
 
 def get_grid_coords(dims, resolution):
@@ -339,7 +342,8 @@ def get_nuscenes_colormap():
     ).astype(np.float32) / 255.
     return colors
 
-def save_gaussian(save_dir, gaussian, name):
+def save_gaussian(save_dir, gaussian, name, scalar=1.5, ignore_opa=False, filter_zsize=False):
+
     empty_label = 17
     sem_cmap = get_nuscenes_colormap()
 
@@ -355,7 +359,24 @@ def save_gaussian(save_dir, gaussian, name):
     sems = gaussian.semantics[0].detach().cpu().numpy() # g, 18
     pred = np.argmax(sems, axis=-1)
 
-    mask = (pred != empty_label) & (opas > 0.75)
+    if ignore_opa:
+        opas[:] = 1.
+        mask = (pred != empty_label)
+    else:
+        mask = (pred != empty_label) & (opas > 0.75)
+
+    if filter_zsize:
+        zdist, zbins = np.histogram(means[:, 2], bins=100)
+        zidx = np.argsort(zdist)[::-1]
+        for idx in zidx[:10]:
+            binl = zbins[idx]
+            binr = zbins[idx + 1]
+            zmsk = (means[:, 2] < binl) | (means[:, 2] > binr)
+            mask = mask & zmsk
+        
+        z_small_mask = scales[:, 2] > 0.1
+        mask = z_small_mask & mask
+
 
     means = means[mask]
     scales = scales[mask]
@@ -374,7 +395,6 @@ def save_gaussian(save_dir, gaussian, name):
     fig = plt.figure(figsize=(9, 9), dpi=300)
     ax = fig.add_subplot(111, projection='3d')
     ax.view_init(elev=46, azim=-180)
-    scalar = 2
 
     # compute each and plot each ellipsoid iteratively
     border = np.array([
@@ -420,3 +440,23 @@ def save_gaussian(save_dir, gaussian, name):
 
     plt.cla()
     plt.clf()
+
+def save_gaussian_topdown(save_dir, anchor_init, gaussian, name):
+    init_means = safe_sigmoid(anchor_init[:, :2]) * 100 - 50
+    means = [init_means] + [g.means[0, :, :2] for g in gaussian]
+
+    plt.clf(); plt.cla()
+    fig = plt.figure(figsize=(24., 16.))
+    grid = ImageGrid(fig, 111,  # similar to subplot(111)
+                    nrows_ncols=(1, 5),  # creates 2x2 grid of Axes
+                    axes_pad=0.,  # pad between Axes in inch.
+                    share_all=True
+                    )
+    grid[0].get_yaxis().set_ticks([])
+    grid[0].get_xaxis().set_ticks([])
+    for ax, im in zip(grid, means):
+        im = im.cpu()
+        # Iterating over the grid returns the Axes.
+        ax.scatter(im[:, 0], im[:, 1], s=0.1, marker='o')
+    plt.savefig(os.path.join(save_dir, f"{name}.jpg"))
+    plt.clf(); plt.cla()

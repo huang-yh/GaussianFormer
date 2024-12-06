@@ -166,3 +166,8 @@ data
 out
 checkpoint_utils.py
 launch_phigent.sh
+/*.png
+/src
+modify_weight.py
+*.npy
+epoch2sd.py
