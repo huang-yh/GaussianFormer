@@ -1,4 +1,5 @@
-# Towards building an object-centric autonomous driving system based on Gaussians
+<!-- # Towards building an object-centric autonomous driving system based on Gaussians -->
+![logo](./assets/logo.png)
 
 We build object-centric autonomous driving systems based on Gaussians!
 
