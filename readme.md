@@ -10,7 +10,7 @@ This repository contains the implementation of the following methods.
 > European Conference on Computer Vision (**ECCV**), 2024<br>
 > [Paper](https://arxiv.org/abs/2405.17429)  | [Project Page](https://wzzheng.net/GaussianFormer) 
 
-> **GaussianFormer-2:Probabilistic Gaussian Superposition for Efficient 3D Occupancy Prediction**<br>
+> **GaussianFormer-2: Probabilistic Gaussian Superposition for Efficient 3D Occupancy Prediction**<br>
 > [Yuanhui Huang](https://huang-yh.github.io/), [Amonnut Thammatadatrakoon](https://www.linkedin.com/in/amonnut-thammatadatrakoon-aa2a37269?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app), [Wenzhao Zheng](https://wzzheng.net/)<sup>*</sup>, [Yunpeng Zhang](https://scholar.google.com/citations?user=UgadGL8AAAAJ&hl=zh-CN&oi=ao), Dalong Du, [Jiwen Lu](http://ivg.au.tsinghua.edu.cn/Jiwen_Lu/)<br>
 > [Paper](http://arxiv.org/abs/2412.04384)
 
