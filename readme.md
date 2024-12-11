@@ -10,7 +10,7 @@ This repository contains the implementation of the following methods.
 > European Conference on Computer Vision (**ECCV**), 2024<br>
 > [Paper](https://arxiv.org/abs/2405.17429)  | [Project Page](https://wzzheng.net/GaussianFormer) 
 
-> **Probabilistic Gaussian Superposition for Efficient 3D Occupancy Prediction**<br>
+> **GaussianFormer-2:Probabilistic Gaussian Superposition for Efficient 3D Occupancy Prediction**<br>
 > [Yuanhui Huang](https://huang-yh.github.io/), [Amonnut Thammatadatrakoon](https://www.linkedin.com/in/amonnut-thammatadatrakoon-aa2a37269?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app), [Wenzhao Zheng](https://wzzheng.net/)<sup>*</sup>, [Yunpeng Zhang](https://scholar.google.com/citations?user=UgadGL8AAAAJ&hl=zh-CN&oi=ao), Dalong Du, [Jiwen Lu](http://ivg.au.tsinghua.edu.cn/Jiwen_Lu/)<br>
 > [Paper](http://arxiv.org/abs/2412.04384)
 
@@ -153,7 +153,7 @@ If you find this project helpful, please consider citing the following paper:
     year={2024}
 }
 @article{huang2024probabilisticgaussiansuperpositionefficient,
-      title={Probabilistic Gaussian Superposition for Efficient 3D Occupancy Prediction}, 
+      title={GaussianFormer-2: Probabilistic Gaussian Superposition for Efficient 3D Occupancy Prediction}, 
       author={Yuanhui Huang and Amonnut Thammatadatrakoon and Wenzhao Zheng and Yunpeng Zhang and Dalong Du and Jiwen Lu},
       journal={arXiv preprint arXiv:2412.04384},
       year={2024}
